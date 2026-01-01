@@ -1,0 +1,135 @@
+[
+  {
+    "_type": "block",
+    "_key": "block1",
+    "style": "h1",
+    "children": [
+      {
+        "_type": "span",
+        "text": "Getting Started with Portable Text",
+        "marks": []
+      }
+    ],
+    "markDefs": []
+  },
+  {
+    "_type": "block",
+    "_key": "block2",
+    "style": "normal",
+    "children": [
+      {
+        "_type": "span",
+        "text": "Portable Text is a ",
+        "marks": []
+      },
+      {
+        "_type": "span",
+        "text": "JSON-based",
+        "marks": ["strong"]
+      },
+      {
+        "_type": "span",
+        "text": " rich text specification that represents content as an ",
+        "marks": []
+      },
+      {
+        "_type": "span",
+        "text": "abstract syntax tree",
+        "marks": ["em"]
+      },
+      {
+        "_type": "span",
+        "text": ".",
+        "marks": []
+      }
+    ],
+    "markDefs": []
+  },
+  {
+    "_type": "block",
+    "_key": "block3",
+    "style": "h2",
+    "children": [
+      {
+        "_type": "span",
+        "text": "Key Features",
+        "marks": []
+      }
+    ],
+    "markDefs": []
+  },
+  {
+    "_type": "block",
+    "_key": "block4",
+    "style": "normal",
+    "listItem": "bullet",
+    "level": 1,
+    "children": [
+      {
+        "_type": "span",
+        "text": "Structured content representation",
+        "marks": []
+      }
+    ],
+    "markDefs": []
+  },
+  {
+    "_type": "block",
+    "_key": "block5",
+    "style": "normal",
+    "listItem": "bullet",
+    "level": 1,
+    "children": [
+      {
+        "_type": "span",
+        "text": "Support for annotations and marks",
+        "marks": []
+      }
+    ],
+    "markDefs": []
+  },
+  {
+    "_type": "block",
+    "_key": "block6",
+    "style": "normal",
+    "listItem": "bullet",
+    "level": 1,
+    "children": [
+      {
+        "_type": "span",
+        "text": "Extensible with custom objects",
+        "marks": []
+      }
+    ],
+    "markDefs": []
+  },
+  {
+    "_type": "block",
+    "_key": "block7",
+    "style": "normal",
+    "children": [
+      {
+        "_type": "span",
+        "text": "For more information, visit the ",
+        "marks": []
+      },
+      {
+        "_type": "span",
+        "text": "official documentation",
+        "marks": ["link1"]
+      },
+      {
+        "_type": "span",
+        "text": ".",
+        "marks": []
+      }
+    ],
+    "markDefs": [
+      {
+        "_type": "link",
+        "_key": "link1",
+        "href": "https://portabletext.org"
+      }
+    ]
+  }
+]
