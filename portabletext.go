@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 )
 
 //
@@ -13,6 +14,9 @@ import (
 //
 
 // Document is an ordered list of Portable Text nodes.
+// Document is not safe for concurrent modification.
+// For concurrent reads, no synchronization is needed.
+// For concurrent writes, external synchronization is required.
 type Document []Node
 
 // Node represents a Portable Text node (block or custom object).
@@ -20,6 +24,7 @@ type Document []Node
 type Node struct {
 	// Required
 	Type string `json:"_type"`
+	Key  string `json:"_key,omitempty"`
 
 	// Common block fields
 	Style    *string   `json:"style,omitempty"`
@@ -51,6 +56,21 @@ type MarkDef struct {
 	Type string `json:"_type"`
 
 	Raw map[string]any `json:"-"`
+}
+
+// ValidationOptions controls what Validate checks.
+type ValidationOptions struct {
+	RequireKeys      bool // Require _key on all blocks
+	CheckMarkDefRefs bool // Verify mark references exist in markDefs
+	AllowEmptyText   bool // Allow empty text in spans
+}
+
+// WalkContext provides context during tree traversal.
+type WalkContext struct {
+	Index      int
+	Parent     *Node
+	Depth      int
+	BlockCount int
 }
 
 // Decode parses JSON Portable Text into a Document.
@@ -97,6 +117,11 @@ func Decode(r io.Reader) (Document, error) {
 	return doc, nil
 }
 
+// DecodeString is a convenience wrapper for Decode.
+func DecodeString(s string) (Document, error) {
+	return Decode(strings.NewReader(s))
+}
+
 // Encode serializes the AST back to JSON.
 // - Re-emits all known and unknown fields
 // - Does not mutate the input document
@@ -104,6 +129,15 @@ func Encode(w io.Writer, doc Document) error {
 	enc := json.NewEncoder(w)
 	enc.SetEscapeHTML(false)
 	return enc.Encode(doc)
+}
+
+// EncodeString is a convenience wrapper for Encode.
+func EncodeString(doc Document) (string, error) {
+	var buf bytes.Buffer
+	if err := Encode(&buf, doc); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
 }
 
 // Walk visits all top-level nodes in order; stops early on fn error.
@@ -116,38 +150,145 @@ func Walk(doc Document, fn func(*Node) error) error {
 	return nil
 }
 
+// WalkWithContext visits all top-level nodes with additional context.
+func WalkWithContext(doc Document, fn func(*Node, WalkContext) error) error {
+	blockCount := 0
+	for i := range doc {
+		ctx := WalkContext{
+			Index:      i,
+			Parent:     nil,
+			Depth:      0,
+			BlockCount: blockCount,
+		}
+		if doc[i].IsBlock() {
+			blockCount++
+		}
+		if err := fn(&doc[i], ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Filter returns a new document with nodes matching the predicate.
+func Filter(doc Document, pred func(*Node) bool) Document {
+	result := make(Document, 0)
+	for i := range doc {
+		if pred(&doc[i]) {
+			result = append(result, *doc[i].Clone())
+		}
+	}
+	return result
+}
+
+// Transform applies fn to each node, returning a new document.
+// If fn returns nil, the node is excluded from the result.
+func Transform(doc Document, fn func(*Node) *Node) Document {
+	result := make(Document, 0, len(doc))
+	for i := range doc {
+		if transformed := fn(doc[i].Clone()); transformed != nil {
+			result = append(result, *transformed)
+		}
+	}
+	return result
+}
+
 // Validate performs optional, opt-in checks. Unknown node types are never errors.
 func Validate(doc Document) []error {
+	return ValidateWithOptions(doc, ValidationOptions{})
+}
+
+// ValidateWithOptions performs validation with custom options.
+func ValidateWithOptions(doc Document, opts ValidationOptions) []error {
 	var errs []error
 	for i := range doc {
 		n := &doc[i]
 		path := fmt.Sprintf("[%d]", i)
 
 		if n.Type == "" {
-			errs = append(errs, fmt.Errorf("%s: missing _type", path))
+			errs = append(errs, &ValidationError{
+				Path:    path,
+				Message: "missing _type",
+				Node:    n,
+			})
 			continue
 		}
 
+		if opts.RequireKeys && n.Key == "" {
+			errs = append(errs, &ValidationError{
+				Path:    path,
+				Message: "missing _key",
+				Node:    n,
+			})
+		}
+
 		if n.Type == "block" {
+			// Build mark def map for reference checking
+			var markDefMap map[string]bool
+			if opts.CheckMarkDefRefs {
+				markDefMap = make(map[string]bool)
+				for _, md := range n.MarkDefs {
+					markDefMap[md.Key] = true
+				}
+			}
+
 			for j := range n.Children {
 				c := &n.Children[j]
 				cpath := fmt.Sprintf("%s.children[%d]", path, j)
 				if c.Type == "" {
-					errs = append(errs, fmt.Errorf("%s: missing _type", cpath))
+					errs = append(errs, &ValidationError{
+						Path:    cpath,
+						Message: "missing _type",
+						Node:    n,
+					})
 					continue
 				}
-				if c.Type == "span" && c.Text == nil {
-					errs = append(errs, fmt.Errorf("%s: span missing text", cpath))
+				if c.Type == "span" {
+					if c.Text == nil {
+						errs = append(errs, &ValidationError{
+							Path:    cpath,
+							Message: "span missing text",
+							Node:    n,
+						})
+					} else if !opts.AllowEmptyText && *c.Text == "" {
+						errs = append(errs, &ValidationError{
+							Path:    cpath,
+							Message: "span has empty text",
+							Node:    n,
+						})
+					}
+
+					// Check mark references
+					if opts.CheckMarkDefRefs {
+						for _, mark := range c.Marks {
+							if !markDefMap[mark] {
+								errs = append(errs, &ValidationError{
+									Path:    cpath,
+									Message: fmt.Sprintf("mark '%s' not found in markDefs", mark),
+									Node:    n,
+								})
+							}
+						}
+					}
 				}
 			}
+
 			for j := range n.MarkDefs {
 				md := &n.MarkDefs[j]
 				mdpath := fmt.Sprintf("%s.markDefs[%d]", path, j)
 				if md.Type == "" {
-					errs = append(errs, fmt.Errorf("%s: markDef missing _type", mdpath))
+					errs = append(errs, &ValidationError{
+						Path:    mdpath,
+						Message: "markDef missing _type",
+						Node:    n,
+					})
 				}
 				if md.Key == "" {
-					errs = append(errs, fmt.Errorf("%s: markDef missing _key", mdpath))
+					errs = append(errs, &ValidationError{
+						Path:    mdpath,
+						Message: "markDef missing _key",
+						Node:    n,
+					})
 				}
 			}
 		}
@@ -157,6 +298,33 @@ func Validate(doc Document) []error {
 
 // IsBlock reports whether this node is a Portable Text "block".
 func (n *Node) IsBlock() bool { return n != nil && n.Type == "block" }
+
+// GetStyle returns the style or a default value.
+func (n *Node) GetStyle() string {
+	if n.Style != nil {
+		return *n.Style
+	}
+	return "normal"
+}
+
+// GetText concatenates all span text in a block.
+func (n *Node) GetText() string {
+	var buf strings.Builder
+	for _, child := range n.Children {
+		if child.Text != nil {
+			buf.WriteString(*child.Text)
+		}
+	}
+	return buf.String()
+}
+
+// GetListLevel returns the list level or 1 if not set.
+func (n *Node) GetListLevel() int {
+	if n.Level != nil {
+		return *n.Level
+	}
+	return 1
+}
 
 // Clone deep-copies the node, including Raw and nested slices/maps.
 func (n *Node) Clone() *Node {
@@ -183,6 +351,61 @@ func (n *Node) Clone() *Node {
 	out.Raw = deepCopyMap(n.Raw)
 
 	return &out
+}
+
+// AddSpan adds a text span to a block node.
+func (n *Node) AddSpan(text string, marks ...string) *Node {
+	span := Span{
+		Type:  "span",
+		Text:  &text,
+		Marks: marks,
+		Raw:   map[string]any{},
+	}
+	n.Children = append(n.Children, span)
+	return n
+}
+
+// AddMarkDef adds a mark definition to a block node.
+func (n *Node) AddMarkDef(key, markType string, raw map[string]any) *Node {
+	md := MarkDef{
+		Key:  key,
+		Type: markType,
+		Raw:  raw,
+	}
+	if md.Raw == nil {
+		md.Raw = map[string]any{}
+	}
+	n.MarkDefs = append(n.MarkDefs, md)
+	return n
+}
+
+// HasMark checks if a span has a specific mark.
+func (s *Span) HasMark(mark string) bool {
+	for _, m := range s.Marks {
+		if m == mark {
+			return true
+		}
+	}
+	return false
+}
+
+// NewBlock creates a basic block node.
+func NewBlock(style string) *Node {
+	return &Node{
+		Type:     "block",
+		Style:    &style,
+		Children: []Span{},
+		MarkDefs: []MarkDef{},
+		Raw:      map[string]any{},
+	}
+}
+
+// NewNode creates a custom node with the given type.
+func NewNode(nodeType string) *Node {
+	return &Node{
+		Type: nodeType,
+		Raw:  map[string]any{},
+	}
 }
 
 //
@@ -221,6 +444,17 @@ func wrap(op, path string, err error) error {
 	return &Error{Op: op, Path: path, Err: err}
 }
 
+// ValidationError represents a validation error with context.
+type ValidationError struct {
+	Path    string
+	Message string
+	Node    *Node // Optional reference to problematic node
+}
+
+func (e *ValidationError) Error() string {
+	return fmt.Sprintf("%s: %s", e.Path, e.Message)
+}
+
 //
 // Parsing (path aware)
 //
@@ -247,6 +481,16 @@ func parseNode(b []byte, path string) (Node, error) {
 	for k, v := range obj {
 		switch k {
 		case "_type":
+		case "_key":
+			if v == nil {
+				n.Raw[k] = nil
+				continue
+			}
+			if s, ok := v.(string); ok {
+				n.Key = s
+			} else {
+				n.Raw[k] = v
+			}
 		case "style":
 			if v == nil {
 				n.Raw[k] = nil // preserve explicit null
@@ -484,6 +728,9 @@ func (n Node) MarshalJSON() ([]byte, error) {
 
 	m["_type"] = n.Type
 
+	if n.Key != "" {
+		m["_key"] = n.Key
+	}
 	if n.Style != nil {
 		m["style"] = *n.Style
 	}
