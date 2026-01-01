@@ -1,0 +1,50 @@
+# ===== Go build artifacts =====
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go workspace files
+go.work
+go.work.sum
+
+# Coverage and profiling
+*.cov
+*.coverprofile
+*.prof
+
+# ===== Dependency directories =====
+vendor/
+
+# ===== OS / editor noise =====
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.tmp
+*~
+
+# VS Code
+.vscode/
+
+# JetBrains IDEs
+.idea/
+
+# ===== Logs =====
+*.log
+
+# ===== Environment / secrets =====
+.env
+.env.*
+
+# ===== Misc =====
+dist/
+build/
+tmp/
+
+# ===== Shell scripts =====
+# (intentionally NOT ignored so gitpush.sh is tracked)
+# *.sh
