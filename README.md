@@ -384,6 +384,126 @@ type TOCEntry struct {
 }
 ```
 
+## Examples
+
+The [`examples/`](examples/) directory contains working CLI tools demonstrating practical use cases:
+
+### 1. Extract Text ([examples/01-extract-text](examples/01-extract-text))
+
+Extract plain text with formatting from Portable Text documents:
+```bash
+cd examples/01-extract-text
+go run main.go ../basic.json
+```
+
+**Output:**
+```
+# Getting Started with Portable Text
+
+Portable Text is a JSON-based rich text specification...
+```
+
+### 2. Find Links ([examples/02-find-links](examples/02-find-links))
+
+Extract all links with their associated text and metadata:
+```bash
+cd examples/02-find-links
+go run main.go ../basic.json
+```
+
+**Output:**
+```
+[1] Key: link1
+    URL: https://portabletext.org
+    Text: official documentation
+```
+
+### 3. Build Document ([examples/03-build-document](examples/03-build-document))
+
+Programmatically create Portable Text documents:
+```bash
+cd examples/03-build-document
+go run main.go > output.json
+```
+
+Creates a complete document with headings, paragraphs, lists, links, and custom blocks.
+
+### 4. Transform Headings ([examples/04-transform-headings](examples/04-transform-headings))
+
+Upgrade or downgrade heading levels:
+```bash
+cd examples/04-transform-headings
+go run main.go --downgrade --pretty ../basic.json
+```
+
+Converts h1→h2, h2→h3, etc. with pretty-printed JSON output.
+
+### 5. Table of Contents ([examples/05-table-of-contents](examples/05-table-of-contents))
+
+Generate a table of contents from document headings:
+```bash
+cd examples/05-table-of-contents
+go run main.go --markdown ../basic.json
+```
+
+**Output:**
+```markdown
+## Table of Contents
+
+- [Getting Started with Portable Text](#getting-started-with-portable-text)
+  - [Key Features](#key-features)
+```
+
+See the [examples README](examples/README.md) for more details and additional use cases.
+
+### Code Snippets
+
+Quick examples for common operations:
+
+**Extract all text:**
+```go
+func ExtractText(doc portabletext.Document) string {
+    var buf strings.Builder
+    for _, node := range doc {
+        if node.IsBlock() {
+            buf.WriteString(node.GetText())
+            buf.WriteString("\n")
+        }
+    }
+    return buf.String()
+}
+```
+
+**Find all links:**
+```go
+func FindLinks(doc portabletext.Document) []string {
+    var links []string
+    for _, node := range doc {
+        for _, md := range node.MarkDefs {
+            if md.Type == "link" {
+                if href, ok := md.Raw["href"].(string); ok {
+                    links = append(links, href)
+                }
+            }
+        }
+    }
+    return links
+}
+```
+
+**Transform document:**
+```go
+func DowngradeHeadings(doc portabletext.Document) portabletext.Document {
+    return portabletext.Transform(doc, func(n *portabletext.Node) *portabletext.Node {
+        if n.GetStyle() == "h1" {
+            h2 := "h2"
+            n.Style = &h2
+        }
+        return n
+    })
+}
+```
+
 ## Portable Text Specification
 
 This library implements the [Portable Text specification](https://github.com/portabletext/portabletext). Key concepts:
