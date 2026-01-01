@@ -20,8 +20,12 @@ A Go library for parsing, validating, and manipulating [Portable Text](https://p
 
 ## Installation
 
+```go
+import "github.com/derickschaefer/portabletext"
+```
+
 ```bash
-go get github.com/derickschaefer/portabletext
+go mod tidy
 ```
 
 ## Quick Start
@@ -561,7 +565,6 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## Related Projects
 
-- [Sanity.io](https://www.sanity.io/) - Headless CMS using Portable Text
 - [Portable Text](https://portabletext.org/) - Official specification
 
 ## Support
