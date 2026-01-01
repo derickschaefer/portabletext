@@ -1,3 +1,10 @@
+## [0.1.2] - 2026-01-01
+
+### Changed
+- Updated README to reference working CLI examples in `/examples/` directory
+- Improved documentation with links to actual example code
+- Added code snippets for common operations
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
